@@ -195,6 +195,59 @@ td{padding:.6rem .7rem;border-top:1.5px solid var(--border);white-space:nowrap}
 </style>
 </head>
 <body onload="initApp()">
+<!-- ▼▼▼ [Vercel/Apps Script 공용] 통신 어댑터 — 이 블록은 지우지 말 것 ▼▼▼ -->
+<script>
+(function(){
+  // Apps Script 웹앱(/exec)에서 직접 열면 네이티브 google.script.run을 그대로 사용 (어댑터 무시)
+  if(location.hostname.indexOf("google") !== -1) return;
+
+  // ⚠️⚠️ 여기에 "이 서포터즈 앱" Apps Script 웹앱 배포 URL(/exec)을 붙여넣으세요.
+  //     (컨설턴트 앱 URL이 아닙니다. 새 배포 만들 때마다 이 값도 함께 바꿔야 합니다.)
+  var EXEC_URL = "여기에_서포터즈앱_배포URL_붙여넣기/exec";
+
+  function callOnce(action, args){
+    return fetch(EXEC_URL, {
+      method: "POST",
+      // ★ 반드시 text/plain 이어야 CORS 프리플라이트 없이 통신됨 (application/json 쓰면 막힘)
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: action, args: args || [] })
+    }).then(function(r){ return r.text(); }).then(function(text){
+      var t = (text || "").trim();
+      if(t.charAt(0) !== "{" && t.charAt(0) !== "[") {
+        throw new Error("서버 응답 오류(JSON 아님) — 배포 URL/권한 설정을 확인하세요");
+      }
+      return JSON.parse(t);
+    });
+  }
+  // 콜드스타트/일시 오류 대비 1회 자동 재시도
+  function callApi(action, args){
+    return callOnce(action, args).catch(function(){ return callOnce(action, args); });
+  }
+
+  function makeRunner(){
+    var state = { ok:null, fail:null };
+    var proxy = new Proxy(state, {
+      get: function(t, prop){
+        if(prop === "withSuccessHandler") return function(fn){ t.ok = fn; return proxy; };
+        if(prop === "withFailureHandler") return function(fn){ t.fail = fn; return proxy; };
+        if(prop === "withUserObject")     return function(){ return proxy; };
+        if(typeof prop !== "string") return undefined;
+        return function(){
+          var args = Array.prototype.slice.call(arguments);
+          callApi(prop, args)
+            .then(function(result){ if(t.ok) t.ok(result); })
+            .catch(function(err){ if(t.fail) t.fail(err); else console.error("API 오류:", err); });
+        };
+      }
+    });
+    return proxy;
+  }
+  window.google = window.google || {};
+  window.google.script = window.google.script || {};
+  Object.defineProperty(window.google.script, "run", { get: makeRunner });
+})();
+</script>
+<!-- ▲▲▲ 여기까지 ▲▲▲ -->
 
 <div class="hero">
   <div class="logo-bar">
