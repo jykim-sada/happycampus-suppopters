@@ -219,9 +219,14 @@ td{padding:.6rem .7rem;border-top:1.5px solid var(--border);white-space:nowrap}
       return JSON.parse(t);
     });
   }
-  // 콜드스타트/일시 오류 대비 1회 자동 재시도
-  function callApi(action, args){
-    return callOnce(action, args).catch(function(){ return callOnce(action, args); });
+  // Apps Script가 간헐적으로 JSON 대신 HTML 페이지를 돌려주는 경우가 있어 최대 3회까지 재시도
+  function callApi(action, args, tries){
+    tries = (tries === undefined) ? 3 : tries;
+    return callOnce(action, args).catch(function(err){
+      if(tries <= 1) throw err;
+      return new Promise(function(r){ setTimeout(r, 500); })
+        .then(function(){ return callApi(action, args, tries - 1); });
+    });
   }
 
   function makeRunner(){
@@ -603,6 +608,8 @@ function loadSupporterDropdowns(){
       if(!sel)return;
       list.forEach(n=>sel.innerHTML+=`<option value="${n}">${n}</option>`);
     });
+  }).withFailureHandler(err=>{
+    showToast("서포터즈 명단을 불러오지 못했습니다. 새로고침 해주세요.","error");
   }).getSupporterList();
 }
 
@@ -974,6 +981,8 @@ function loadMyMreports(){
         </div>
         ${mrAttachHtml(r.attachFiles)}
       </div>`;}).join('');
+  }).withFailureHandler(err=>{
+    el.innerHTML='<div class="no-data">⚠️ 목록을 불러오지 못했습니다.<br><button class="btn-edit" style="margin-top:.6rem" onclick="loadMyMreports()">다시 시도</button></div>';
   }).getMyMonthlyReports(currentUser);
 }
 function deleteMreport(rowIndex){
@@ -1219,7 +1228,7 @@ function loadMrView(){
         ${mrAttachHtml(r.attachFiles)}
       </div>`;
     }).join('');
-  }).getAllMonthlyReports(from,to,sn);
+  }).getAllMonthlyReports(from,to,sn,window._adminPw||'');
 }
 // (관리자) 서포터즈가 7일 지나도 수정할 수 있게 "수정 허용/잠금" 토글
 function toggleMrUnlock(rowIndex, unlock){
@@ -1367,8 +1376,8 @@ function loadAllStats(){
         if(region&&rec.region.trim()!==region)return false;
         return true;
       }));
-    }).getAllRecords();
-  }).getAllStats(from,to,sn,region);
+    }).getAllRecords(window._adminPw||'');
+  }).getAllStats(from,to,sn,region,window._adminPw||'');
 }
 function renderAdminTable(records){
   const body=document.getElementById('adminBody');
@@ -1407,7 +1416,7 @@ function loadMreportStats(){
         (c.sort?Object.entries(c.data).sort((a,b)=>a[0].localeCompare(b[0])):Object.entries(c.data)).map(e=>e[1])));
       bindChartTypeSelectors();
     },100);
-  }).withFailureHandler(err=>{bodyEl.innerHTML='<div class="no-data">⚠️ 조회 실패: '+err.message+'<br><span style="font-size:.75rem">Code.gs를 재배포했는지 확인하세요</span></div>';}).getMonthlyReportStats(from,to,sn);
+  }).withFailureHandler(err=>{bodyEl.innerHTML='<div class="no-data">⚠️ 조회 실패: '+err.message+'<br><span style="font-size:.75rem">Code.gs를 재배포했는지 확인하세요</span></div>';}).getMonthlyReportStats(from,to,sn,window._adminPw||'');
 }
 
 // ── Toast ──
